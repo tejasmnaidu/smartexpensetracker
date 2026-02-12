@@ -5,6 +5,14 @@ A beginner-friendly yet realistic Expense Tracker web app built using **Python +
 ## 🔗 Live Demo
 👉 https://smartexpensetracker-xxxx.streamlit.app
 
+## 🧠 How It Works
+- User enters expense details in the Streamlit UI  
+- Data is saved in a CSV file  
+- Pandas processes totals and monthly summaries  
+- Matplotlib renders bar and pie charts  
+- Deployed on Streamlit Cloud via GitHub integration
+
+
 ## 🚀 Features
 - Add expenses with title, amount, date & category  
 - View total spending (All time & Monthly)  
