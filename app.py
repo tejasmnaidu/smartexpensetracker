@@ -194,8 +194,27 @@ if not df.empty:
             export_df = df[df["Date"].apply(lambda x: x.strftime("%Y-%m")) == export_month]
             filename = f"expenses_{export_month}.xlsx"
 
+        # Ensure Date is formatted nicely
+        export_df["Date"] = pd.to_datetime(export_df["Date"]).dt.strftime("%Y-%m-%d")
+
         buffer = BytesIO()
-        export_df.to_excel(buffer, index=False, engine="openpyxl")
+
+        with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+            export_df.to_excel(writer, index=False, sheet_name="Expenses")
+
+            worksheet = writer.sheets["Expenses"]
+
+            # Auto-adjust column widths
+            for col in worksheet.columns:
+                max_length = 0
+                col_letter = col[0].column_letter
+                for cell in col:
+                    try:
+                        max_length = max(max_length, len(str(cell.value)))
+                    except:
+                        pass
+                worksheet.column_dimensions[col_letter].width = max_length + 3
+
         buffer.seek(0)
 
         st.download_button(
@@ -204,6 +223,7 @@ if not df.empty:
             file_name=filename,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+
 
 # ---------- Footer ----------
 st.markdown("---")
