@@ -20,7 +20,7 @@ st.write("🔥 Streamlit UI is working")
 st.title("💼 Smart Expense Manager")
 
 FILE_NAME = "expenses.csv"
-BUDGET_FILE = "budget.txt"
+# BUDGET_FILE REMOVED (no fixed file now)
 
 # ---------- Load Data ----------
 if os.path.exists(FILE_NAME):
@@ -29,23 +29,27 @@ if os.path.exists(FILE_NAME):
 else:
     df = pd.DataFrame(columns=["Name", "Amount", "Date", "Category"])
 
-if os.path.exists(BUDGET_FILE):
-    with open(BUDGET_FILE, "r") as f:
-        monthly_budget = float(f.read())
-else:
-    monthly_budget = 0.0
-
-# ---------- Sidebar ----------
+# ---------- Sidebar (Budget changed only) ----------
 st.sidebar.header("⚙️ Settings")
-new_budget = st.sidebar.number_input("Set Monthly Budget (₹)", min_value=0.0, value=monthly_budget, step=500.0)
+
+if "monthly_budget" not in st.session_state:
+    st.session_state.monthly_budget = 0.0
+
+new_budget = st.sidebar.number_input(
+    "Set Monthly Budget (₹)",
+    min_value=0.0,
+    value=float(st.session_state.monthly_budget),
+    step=500.0
+)
 
 if st.sidebar.button("Save Budget"):
-    with open(BUDGET_FILE, "w") as f:
-        f.write(str(new_budget))
+    st.session_state.monthly_budget = new_budget
     st.sidebar.success("Budget saved!")
 
+monthly_budget = st.session_state.monthly_budget
+
 st.sidebar.markdown("---")
-st.sidebar.info("📌 Demo project for interviews")
+st.sidebar.info("📌 Tracking expenses ")
 
 # ---------- Add Expense ----------
 st.subheader("➕ Add Expense")
@@ -204,7 +208,6 @@ if not df.empty:
         wb = load_workbook(buffer)
         ws = wb.active
 
-        # Auto-fit columns so no #### appears in Excel
         for col in ws.columns:
             max_length = 0
             col_letter = col[0].column_letter
@@ -226,4 +229,4 @@ if not df.empty:
 
 # ---------- Footer ----------
 st.markdown("---")
-st.caption("Built with ❤️ using Python & Streamlit")
+st.caption("Built using Python & Streamlit")
