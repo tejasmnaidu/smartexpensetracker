@@ -7,6 +7,8 @@ import pandas as pd
 from datetime import date
 import os
 from io import BytesIO
+from openpyxl import load_workbook
+
 
 st.set_page_config(
     page_title="Smart Expense Manager",
@@ -197,11 +199,27 @@ if not df.empty:
 
         buffer = BytesIO()
         export_df.to_excel(buffer, index=False, engine="openpyxl")
-        excel_bytes = buffer.getvalue()
+        buffer.seek(0)
+
+        wb = load_workbook(buffer)
+        ws = wb.active
+
+        # Auto-fit columns so no #### appears in Excel
+        for col in ws.columns:
+            max_length = 0
+            col_letter = col[0].column_letter
+            for cell in col:
+                if cell.value:
+                    max_length = max(max_length, len(str(cell.value)))
+            ws.column_dimensions[col_letter].width = max_length + 2
+
+        final_buffer = BytesIO()
+        wb.save(final_buffer)
+        final_buffer.seek(0)
 
         st.download_button(
             "⬇️ Download Excel",
-            data=excel_bytes,
+            data=final_buffer.getvalue(),
             file_name=filename,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
