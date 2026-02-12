@@ -1,6 +1,5 @@
-
 import matplotlib
-matplotlib.use("Agg")   # MUST be before pyplot
+matplotlib.use("Agg")  # MUST be before pyplot
 
 import streamlit as st
 import matplotlib.pyplot as plt
@@ -135,7 +134,9 @@ if not filtered_df.empty:
     with c6:
         st.subheader("🥧 Category-wise Spending (Pie)")
         pie_data = filtered_df.groupby("Category")["Amount"].sum()
-        st.pyplot(pie_data.plot.pie(autopct="%1.1f%%").figure)
+        fig, ax = plt.subplots()
+        pie_data.plot.pie(autopct="%1.1f%%", ax=ax)
+        st.pyplot(fig)
 
 st.divider()
 
@@ -153,6 +154,8 @@ if not df.empty:
 else:
     st.info("No data to show trend yet.")
 
+st.divider()
+
 # ---------- Delete ----------
 st.subheader("🗑️ Manage Expenses")
 
@@ -169,7 +172,8 @@ if not df.empty:
         st.success("Deleted successfully!")
         st.rerun()
 
-# ---------- Export ----------
+st.divider()
+
 # ---------- Export ----------
 st.subheader("⬇️ Export Report")
 
@@ -194,8 +198,13 @@ if not df.empty:
         buffer = BytesIO()
         export_df.to_excel(buffer, index=False, engine="openpyxl")
         excel_bytes = buffer.getvalue()
-        st.download_button("⬇️ Download Excel", data=excel_bytes, file_name=filename, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
+        st.download_button(
+            "⬇️ Download Excel",
+            data=excel_bytes,
+            file_name=filename,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
 
 # ---------- Footer ----------
 st.markdown("---")
