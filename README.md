@@ -3,10 +3,10 @@
 A beginner-friendly yet realistic Expense Tracker web app built using **Python + Streamlit**.
 
 ## 🔗 Live Demo
-👉 https://https://smartexpensetracker-bckewjy44xapdtsqws4kbi.streamlit.app/
+👉 https://smartexpensetracker-bckewjy44xapdtsqws4kbi.streamlit.app/
 
 ## 📸 App Screenshot
-![Smart Expense Manager](Screenshot%202026-02-12%20134330.png)
+(Screenshot%202026-02-12%20134330.png)
 
 ## 🧠 How It Works
 - User enters expense details in the Streamlit UI  
