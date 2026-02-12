@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from datetime import date
 import os
+from io import BytesIO
 
 st.set_page_config(
     page_title="Smart Expense Manager",
@@ -190,7 +191,9 @@ if not df.empty:
             export_df = df[df["Date"].apply(lambda x: x.strftime("%Y-%m")) == export_month]
             filename = f"expenses_{export_month}.xlsx"
 
-        excel_bytes = export_df.to_excel(index=False, engine="openpyxl")
+        buffer = BytesIO()
+        export_df.to_excel(buffer, index=False, engine="openpyxl")
+        excel_bytes = buffer.getvalue()
         st.download_button("⬇️ Download Excel", data=excel_bytes, file_name=filename, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
