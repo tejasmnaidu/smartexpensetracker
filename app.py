@@ -138,6 +138,20 @@ if not filtered_df.empty:
 
 st.divider()
 
+# ---------- Trend Line ----------
+st.subheader("📈 Spending Trend Over Time")
+
+if not df.empty:
+    df_trend = df.copy()
+    df_trend["Date"] = pd.to_datetime(df_trend["Date"])
+
+    trend_df = df_trend.groupby(df_trend["Date"].dt.to_period("D"))["Amount"].sum().reset_index()
+    trend_df["Date"] = trend_df["Date"].astype(str)
+
+    st.line_chart(trend_df.set_index("Date"))
+else:
+    st.info("No data to show trend yet.")
+
 # ---------- Delete ----------
 st.subheader("🗑️ Manage Expenses")
 
@@ -155,10 +169,30 @@ if not df.empty:
         st.rerun()
 
 # ---------- Export ----------
+# ---------- Export ----------
 st.subheader("⬇️ Export Report")
+
 if not df.empty:
-    csv = df.to_csv(index=False).encode("utf-8")
-    st.download_button("Download CSV", csv, "expenses_report.csv", "text/csv")
+    col1, col2 = st.columns(2)
+
+    with col1:
+        csv = df.to_csv(index=False).encode("utf-8")
+        st.download_button("⬇️ Download CSV", csv, "expenses_report.csv", "text/csv")
+
+    with col2:
+        month_options = ["All"] + sorted(list(set([d.strftime("%Y-%m") for d in df["Date"]])))
+        export_month = st.selectbox("Select Month for Excel", month_options)
+
+        if export_month == "All":
+            export_df = df.copy()
+            filename = "expenses_report.xlsx"
+        else:
+            export_df = df[df["Date"].apply(lambda x: x.strftime("%Y-%m")) == export_month]
+            filename = f"expenses_{export_month}.xlsx"
+
+        excel_bytes = export_df.to_excel(index=False, engine="openpyxl")
+        st.download_button("⬇️ Download Excel", data=excel_bytes, file_name=filename, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
 
 # ---------- Footer ----------
 st.markdown("---")
