@@ -1,23 +1,25 @@
-# Smart Expense Tracker 🧾💸
+# 💸 Smart Expense Tracker (Streamlit App)
 
-A beginner-friendly yet realistic Expense Tracker web app built using **Python** and **Streamlit**.  
-This app helps users add, view, delete expenses and export them as CSV.
+A beginner-friendly yet realistic Expense Tracker web app built using **Python + Streamlit**.
+
+## 🔗 Live Demo
+👉 https://smartexpensetracker-xxxx.streamlit.app
 
 ## 🚀 Features
-- Add expenses with name, amount, date
-- View all expenses in a table
-- Delete selected expenses
-- Export expenses to CSV
-- Simple and clean UI with Streamlit
+- Add expenses with title, amount, date & category  
+- View total spending (All time & Monthly)  
+- Budget tracking & remaining budget  
+- Category-wise analysis (Bar + Pie charts)  
+- Filter by category and month  
+- Data stored in CSV (can be extended to DB)  
 
 ## 🛠 Tech Stack
-- Python
-- Streamlit
-- Pandas
-- Git & GitHub
+- Python  
+- Streamlit  
+- Pandas  
+- Matplotlib  
 
-## ▶️ How to Run Locally
-
+## ▶️ Run Locally
 ```bash
-pip install streamlit pandas
+pip install -r requirements.txt
 streamlit run app.py
