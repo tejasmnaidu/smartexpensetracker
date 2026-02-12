@@ -1,22 +1,21 @@
-import streamlit as st
 
-# MUST be the first Streamlit command
+import matplotlib
+matplotlib.use("Agg")   # MUST be before pyplot
+
+import streamlit as st
+import matplotlib.pyplot as plt
+import pandas as pd
+from datetime import date
+import os
+
 st.set_page_config(
     page_title="Smart Expense Manager",
     page_icon="💸",
     layout="wide"
 )
 
-# Quick test to confirm UI loads
 st.write("🔥 Streamlit UI is working")
-
-# Your normal imports
-import pandas as pd
-from datetime import date
-import os
-
 st.title("💼 Smart Expense Manager")
-
 
 FILE_NAME = "expenses.csv"
 BUDGET_FILE = "budget.txt"
