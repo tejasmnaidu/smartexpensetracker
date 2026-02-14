@@ -189,25 +189,28 @@ st.dataframe(filtered_df, use_container_width=True)
 st.subheader("✏️ Edit Expense")
 
 if not df.empty:
-    df_edit = df.copy()
-    df_edit["label"] = df_edit.apply(
-        lambda x: f"{x['Name']} - ₹{x['Amount']} ({x['Date']})", axis=1
+    edit_idx = st.selectbox(
+        "Select expense to edit",
+        df.index,
+        format_func=lambda i: f"{df.loc[i,'Name']} - ₹{df.loc[i,'Amount']} ({df.loc[i,'Date']})"
     )
 
-    selected_label = st.selectbox("Select expense to edit", df_edit["label"].tolist())
+    col1, col2, col3, col4 = st.columns(4)
 
-    selected_row = df_edit[df_edit["label"] == selected_label].iloc[0]
+    with col1:
+        new_name = st.text_input("Edit Title", value=df.loc[edit_idx, "Name"])
+    with col2:
+        new_amount = st.number_input("Edit Amount (₹)", min_value=0.0, value=float(df.loc[edit_idx, "Amount"]))
+    with col3:
+        new_date = st.date_input("Edit Date", value=df.loc[edit_idx, "Date"])
+    with col4:
+        new_category = st.selectbox(
+            "Edit Category",
+            ["Food","Travel","Shopping","Bills","Entertainment","Health","Other"],
+            index=["Food","Travel","Shopping","Bills","Entertainment","Health","Other"].index(df.loc[edit_idx, "Category"])
+        )
 
-    new_name = st.text_input("Edit Title", selected_row["Name"])
-    new_amount = st.number_input("Edit Amount (₹)", min_value=0.0, value=float(selected_row["Amount"]))
-    new_date = st.date_input("Edit Date", selected_row["Date"])
-    new_category = st.selectbox(
-        "Edit Category",
-        ["Food","Travel","Shopping","Bills","Entertainment","Health","Other"],
-        index=["Food","Travel","Shopping","Bills","Entertainment","Health","Other"].index(selected_row["Category"])
-    )
-
-    if st.button("✅ Save Changes", use_container_width=True):
+    if st.button("💾 Save Changes", use_container_width=True):
         c.execute("""
             UPDATE expenses 
             SET name=?, amount=?, date=?, category=? 
@@ -215,12 +218,16 @@ if not df.empty:
         """, (
             new_name, new_amount, str(new_date), new_category,
             st.session_state.username,
-            selected_row["Name"], selected_row["Amount"], str(selected_row["Date"]), selected_row["Category"]
+            df.loc[edit_idx, "Name"],
+            float(df.loc[edit_idx, "Amount"]),
+            str(df.loc[edit_idx, "Date"]),
+            df.loc[edit_idx, "Category"]
         ))
         conn.commit()
         st.success("Expense updated successfully!")
         st.rerun()
-
+else:
+    st.info("No expenses available to edit.")
 
 # ---------------- COLORFUL CHARTS ----------------
 if not filtered_df.empty:
@@ -275,6 +282,70 @@ if not df.empty:
         spend_2 = monthly_summary[monthly_summary["Month"] == month_2]["Amount"].values[0]
 
         st.metric(f"Difference ({month_2} vs {month_1})", f"₹ {spend_2}", f"₹ {spend_2 - spend_1:.2f}")
+
+        # ---------------- SMART INSIGHTS ----------------
+st.subheader("🧠 Smart Spending Insights")
+
+if not df.empty:
+    df_insight = df.copy()
+    df_insight["Month"] = pd.to_datetime(df_insight["Date"]).dt.to_period("M").astype(str)
+
+    current_month = date.today().strftime("%Y-%m")
+    prev_month = (pd.Period(current_month) - 1).strftime("%Y-%m")
+
+    current_df = df_insight[df_insight["Month"] == current_month]
+    prev_df = df_insight[df_insight["Month"] == prev_month]
+
+    insights = []
+
+    # 1️⃣ Highest spending category this month
+    if not current_df.empty:
+        top_cat = current_df.groupby("Category")["Amount"].sum().idxmax()
+        top_amt = current_df.groupby("Category")["Amount"].sum().max()
+        insights.append(f"📌 Your highest spending category this month is **{top_cat} (₹{top_amt:.0f})**.")
+
+    # 2️⃣ Compare with last month
+    if not current_df.empty and not prev_df.empty:
+        curr_total = current_df["Amount"].sum()
+        prev_total = prev_df["Amount"].sum()
+        diff = curr_total - prev_total
+        pct = (diff / prev_total) * 100 if prev_total > 0 else 0
+
+        if diff > 0:
+            insights.append(f"📈 You spent **₹{diff:.0f} more** this month compared to last month (+{pct:.1f}%).")
+        elif diff < 0:
+            insights.append(f"📉 You spent **₹{abs(diff):.0f} less** this month compared to last month ({pct:.1f}%).")
+        else:
+            insights.append("➖ Your spending is the **same as last month**.")
+
+    # 3️⃣ Budget insight
+    if monthly_budget > 0:
+        if monthly_spent > monthly_budget:
+            insights.append("🚨 You have **exceeded your monthly budget**. Consider cutting down expenses.")
+        else:
+            remaining = monthly_budget - monthly_spent
+            insights.append(f"✅ You are within budget. You can still spend **₹{remaining:.0f}** this month.")
+
+    # 4️⃣ Trend insight
+    if len(df_insight["Month"].unique()) >= 3:
+        monthly_summary = df_insight.groupby("Month")["Amount"].sum().reset_index()
+        last_3 = monthly_summary.tail(3)["Amount"].values
+
+        if last_3[2] > last_3[1] > last_3[0]:
+            insights.append("📊 Your spending is **increasing over the last 3 months**.")
+        elif last_3[2] < last_3[1] < last_3[0]:
+            insights.append("📉 Your spending is **decreasing over the last 3 months**.")
+        else:
+            insights.append("📊 Your spending is **fluctuating over recent months**.")
+
+    if insights:
+        for ins in insights:
+            st.info(ins)
+    else:
+        st.info("Add more data to generate smart insights.")
+else:
+    st.info("Add expenses to see smart insights.")
+
 
 # ---------------- EXPORT ----------------
 st.subheader("⬇️ Export Report")
