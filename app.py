@@ -9,11 +9,34 @@ from io import BytesIO
 import sqlite3
 import hashlib
 
-# ---------------- PAGE CONFIG ----------------
+# ---------------- CONFIG ----------------
 st.set_page_config(page_title="Smart Expense Manager", page_icon="💸", layout="wide")
+DB_FILE = "app.db"
 
-# ---------------- DATABASE ----------------
-conn = sqlite3.connect("app.db", check_same_thread=False)
+# ---------------- DB HELPERS ----------------
+def get_db():
+    return sqlite3.connect(DB_FILE, check_same_thread=False)
+
+def hash_password(pw):
+    return hashlib.sha256(pw.encode()).hexdigest()
+
+def verify_user(username, password):
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT password FROM users WHERE username=?", (username,))
+    row = c.fetchone()
+    conn.close()
+    return row and row[0] == hash_password(password)
+
+def update_password(username, new_password):
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("UPDATE users SET password=? WHERE username=?", (hash_password(new_password), username))
+    conn.commit()
+    conn.close()
+
+# ---------------- INIT DB ----------------
+conn = get_db()
 c = conn.cursor()
 
 c.execute("""
@@ -37,49 +60,57 @@ CREATE TABLE IF NOT EXISTS expenses (
 """)
 conn.commit()
 
-def hash_password(pw):
-    return hashlib.sha256(pw.encode()).hexdigest()
-
 # ---------------- SESSION ----------------
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "username" not in st.session_state:
     st.session_state.username = ""
 
-# ---------------- AUTH ----------------
+# ---------------- AUTH UI ----------------
 st.title("💼 Smart Expense Manager")
-
-menu = ["Login", "Register", "Forgot Password"]
+menu = ["Login", "Register", "Reset Password"]
 choice = st.sidebar.selectbox("Account", menu)
 
 if not st.session_state.logged_in:
+
     if choice == "Login":
         st.subheader("🔐 Login")
         u = st.text_input("Username")
         p = st.text_input("Password", type="password")
         if st.button("Login"):
-            c.execute("SELECT * FROM users WHERE username=? AND password=?", (u, hash_password(p)))
-            if c.fetchone():
+            if verify_user(u, p):
                 st.session_state.logged_in = True
                 st.session_state.username = u
+                st.success("Logged in successfully!")
                 st.rerun()
             else:
                 st.error("Invalid credentials")
 
     elif choice == "Register":
         st.subheader("📝 Register")
-        u = st.text_input("Username")
-        p = st.text_input("Password", type="password")
+        u = st.text_input("New Username")
+        p = st.text_input("New Password", type="password")
         if st.button("Register"):
             try:
-                c.execute("INSERT INTO users (username, password, budget) VALUES (?, ?, 0)", (u, hash_password(p)))
+                c.execute("INSERT INTO users (username, password, budget) VALUES (?, ?, 0)",
+                          (u, hash_password(p)))
                 conn.commit()
                 st.success("Account created! Login now.")
             except:
                 st.error("Username already exists")
 
-    elif choice == "Forgot Password":
-        st.info("Demo only – password reset link would be sent.")
+    elif choice == "Reset Password":
+        st.subheader("🔁 Reset Password")
+        u = st.text_input("Username")
+        old_pw = st.text_input("Old Password", type="password")
+        new_pw = st.text_input("New Password", type="password")
+
+        if st.button("Reset Password"):
+            if verify_user(u, old_pw):
+                update_password(u, new_pw)
+                st.success("Password updated successfully!")
+            else:
+                st.error("Invalid username or old password")
 
     st.stop()
 
@@ -90,12 +121,12 @@ if st.sidebar.button("🚪 Logout"):
     st.session_state.username = ""
     st.rerun()
 
-# ---------------- LOAD USER BUDGET ----------------
+# ---------------- BUDGET ----------------
 c.execute("SELECT budget FROM users WHERE username=?", (st.session_state.username,))
 monthly_budget = c.fetchone()[0]
 
 st.sidebar.header("🎯 Budget Settings")
-new_budget = st.sidebar.number_input("Set Monthly Budget (₹)", min_value=0.0, value=float(monthly_budget), step=500.0)
+new_budget = st.sidebar.number_input("Set Monthly Budget (₹)", 0.0, value=float(monthly_budget), step=500.0)
 if st.sidebar.button("Save Budget"):
     c.execute("UPDATE users SET budget=? WHERE username=?", (new_budget, st.session_state.username))
     conn.commit()
@@ -112,7 +143,7 @@ if not df.empty:
 st.subheader("➕ Add Expense")
 c1, c2, c3, c4 = st.columns(4)
 with c1: name = st.text_input("Title")
-with c2: amount = st.number_input("Amount (₹)", min_value=0.0, step=1.0)
+with c2: amount = st.number_input("Amount (₹)", 0.0, step=1.0)
 with c3: exp_date = st.date_input("Date", value=date.today())
 with c4: category = st.selectbox("Category", ["Food","Travel","Shopping","Bills","Entertainment","Health","Other"])
 
@@ -191,7 +222,7 @@ if not df.empty:
         export_df.to_excel(writer, index=False, sheet_name="Expenses")
         ws = writer.sheets["Expenses"]
         for col in ws.columns:
-            ws.column_dimensions[col[0].column_letter].width = 20
+            ws.column_dimensions[col[0].column_letter].width = 18
 
     buffer.seek(0)
     st.download_button("⬇️ Download Excel", buffer, "expenses.xlsx",
