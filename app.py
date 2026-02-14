@@ -211,6 +211,49 @@ if not df.empty:
     trend_df["Date"] = trend_df["Date"].astype(str)
     st.line_chart(trend_df.set_index("Date"))
 
+# ---------------- MONTHLY COMPARISON DASHBOARD ----------------
+st.subheader("📊 Monthly Comparison Dashboard")
+
+if not df.empty:
+    df_monthly = df.copy()
+    df_monthly["Month"] = pd.to_datetime(df_monthly["Date"]).dt.to_period("M").astype(str)
+
+    monthly_summary = df_monthly.groupby("Month")["Amount"].sum().reset_index()
+
+    c7, c8 = st.columns(2)
+
+    with c7:
+        st.markdown("**📊 Total Spending per Month (Bar Chart)**")
+        st.bar_chart(monthly_summary.set_index("Month"))
+
+    with c8:
+        st.markdown("**📈 Monthly Spending Trend (Line Chart)**")
+        st.line_chart(monthly_summary.set_index("Month"))
+
+    # Optional comparison selector
+    st.markdown("### 🔍 Compare Two Months")
+
+    months = monthly_summary["Month"].tolist()
+    if len(months) >= 2:
+        m1, m2 = st.columns(2)
+        with m1:
+            month_1 = st.selectbox("Select Month 1", months, index=len(months)-2)
+        with m2:
+            month_2 = st.selectbox("Select Month 2", months, index=len(months)-1)
+
+        spend_1 = monthly_summary[monthly_summary["Month"] == month_1]["Amount"].values[0]
+        spend_2 = monthly_summary[monthly_summary["Month"] == month_2]["Amount"].values[0]
+
+        diff = spend_2 - spend_1
+
+        st.metric(
+            label=f"Difference ({month_2} vs {month_1})",
+            value=f"₹ {spend_2}",
+            delta=f"₹ {diff:.2f}"
+        )
+else:
+    st.info("Add expenses across different months to see comparison.")
+
 # ---------------- EXPORT ----------------
 st.subheader("⬇️ Export Report")
 if not df.empty:
