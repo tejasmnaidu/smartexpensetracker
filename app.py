@@ -1,7 +1,7 @@
+import plotly.express as px
 import matplotlib
 matplotlib.use("Agg")
 
-import plotly.express as px
 import streamlit as st
 import pandas as pd
 from datetime import date
@@ -12,9 +12,6 @@ import hashlib
 # ---------------- CONFIG ----------------
 st.set_page_config(page_title="Smart Expense Manager", page_icon="💸", layout="wide")
 DB_FILE = "app.db"
-
-PLOTLY_COLORS = ["#636EFA", "#EF553B", "#00CC96", "#AB63FA", "#FFA15A", "#19D3F3", "#FF6692"]
-PLOTLY_TEMPLATE = "plotly_white"
 
 # ---------------- DB HELPERS ----------------
 def get_db():
@@ -75,6 +72,7 @@ menu = ["Login", "Register", "Reset Password"]
 choice = st.sidebar.selectbox("Account", menu)
 
 if not st.session_state.logged_in:
+
     if choice == "Login":
         st.subheader("🔐 Login")
         u = st.text_input("Username")
@@ -106,6 +104,7 @@ if not st.session_state.logged_in:
         u = st.text_input("Username")
         old_pw = st.text_input("Old Password", type="password")
         new_pw = st.text_input("New Password", type="password")
+
         if st.button("Reset Password"):
             if verify_user(u, old_pw):
                 update_password(u, new_pw)
@@ -174,9 +173,6 @@ k1.metric("💰 Total Spent", f"₹ {total_spent}")
 k2.metric("📅 This Month", f"₹ {monthly_spent}")
 k3.metric("🎯 Remaining Budget", f"₹ {remaining_budget}")
 
-if monthly_budget > 0 and monthly_spent > monthly_budget:
-    st.error("🚨 You have exceeded your monthly budget!")
-
 # ---------------- FILTER ----------------
 st.subheader("🔍 Filter & Analyze")
 filter_category = st.selectbox("Category", ["All"] + sorted(df["Category"].unique().tolist()) if not df.empty else ["All"])
@@ -189,24 +185,57 @@ if filter_month != "All":
     filtered_df = filtered_df[filtered_df["Date"].astype(str).str.startswith(filter_month)]
 
 st.dataframe(filtered_df, use_container_width=True)
+# ---------------- EDIT EXPENSE ----------------
+st.subheader("✏️ Edit Expense")
 
-# ---------------- CHARTS ----------------
+if not df.empty:
+    df_edit = df.copy()
+    df_edit["label"] = df_edit.apply(
+        lambda x: f"{x['Name']} - ₹{x['Amount']} ({x['Date']})", axis=1
+    )
+
+    selected_label = st.selectbox("Select expense to edit", df_edit["label"].tolist())
+
+    selected_row = df_edit[df_edit["label"] == selected_label].iloc[0]
+
+    new_name = st.text_input("Edit Title", selected_row["Name"])
+    new_amount = st.number_input("Edit Amount (₹)", min_value=0.0, value=float(selected_row["Amount"]))
+    new_date = st.date_input("Edit Date", selected_row["Date"])
+    new_category = st.selectbox(
+        "Edit Category",
+        ["Food","Travel","Shopping","Bills","Entertainment","Health","Other"],
+        index=["Food","Travel","Shopping","Bills","Entertainment","Health","Other"].index(selected_row["Category"])
+    )
+
+    if st.button("✅ Save Changes", use_container_width=True):
+        c.execute("""
+            UPDATE expenses 
+            SET name=?, amount=?, date=?, category=? 
+            WHERE username=? AND name=? AND amount=? AND date=? AND category=?
+        """, (
+            new_name, new_amount, str(new_date), new_category,
+            st.session_state.username,
+            selected_row["Name"], selected_row["Amount"], str(selected_row["Date"]), selected_row["Category"]
+        ))
+        conn.commit()
+        st.success("Expense updated successfully!")
+        st.rerun()
+
+
+# ---------------- COLORFUL CHARTS ----------------
 if not filtered_df.empty:
     c5, c6 = st.columns(2)
+
     with c5:
         bar_df = filtered_df.groupby("Category")["Amount"].sum().reset_index()
-        fig_bar = px.bar(bar_df, x="Category", y="Amount", color="Category",
-                         color_discrete_sequence=PLOTLY_COLORS, template=PLOTLY_TEMPLATE,
-                         text_auto=True, title="Category-wise Spending")
-        fig_bar.update_layout(title_x=0.5)
+        fig_bar = px.bar(bar_df, x="Category", y="Amount", color="Category", text_auto=True,
+                         title="Category-wise Spending", color_discrete_sequence=px.colors.qualitative.Bold)
         st.plotly_chart(fig_bar, use_container_width=True)
 
     with c6:
         pie_df = filtered_df.groupby("Category")["Amount"].sum().reset_index()
         fig_pie = px.pie(pie_df, names="Category", values="Amount", hole=0.4,
-                         color_discrete_sequence=PLOTLY_COLORS, template=PLOTLY_TEMPLATE,
-                         title="Category-wise Spending Distribution")
-        fig_pie.update_layout(title_x=0.5)
+                         title="Spending Distribution", color_discrete_sequence=px.colors.qualitative.Prism)
         st.plotly_chart(fig_pie, use_container_width=True)
 
 # ---------------- TREND ----------------
@@ -216,101 +245,53 @@ if not df.empty:
     df_trend["Date"] = pd.to_datetime(df_trend["Date"])
     trend_df = df_trend.groupby(df_trend["Date"].dt.to_period("D"))["Amount"].sum().reset_index()
     trend_df["Date"] = trend_df["Date"].astype(str)
-    fig_trend = px.line(trend_df, x="Date", y="Amount", markers=True,
-                        template=PLOTLY_TEMPLATE, title="Daily Spending Trend")
-    fig_trend.update_traces(line=dict(width=3))
-    fig_trend.update_layout(title_x=0.5)
+    fig_trend = px.line(trend_df, x="Date", y="Amount", markers=True, title="Daily Spending Trend")
     st.plotly_chart(fig_trend, use_container_width=True)
 
-# ---------------- MONTHLY COMPARISON DASHBOARD ----------------
+# ---------------- MONTHLY COMPARISON ----------------
 st.subheader("📊 Monthly Comparison Dashboard")
+
 if not df.empty:
     df_monthly = df.copy()
     df_monthly["Month"] = pd.to_datetime(df_monthly["Date"]).dt.to_period("M").astype(str)
     monthly_summary = df_monthly.groupby("Month")["Amount"].sum().reset_index()
 
-    c7, c8 = st.columns(2)
-    with c7:
-        fig_month_bar = px.bar(monthly_summary, x="Month", y="Amount", color="Month",
-                               color_discrete_sequence=PLOTLY_COLORS, template=PLOTLY_TEMPLATE,
-                               text_auto=True, title="Monthly Spending Comparison")
-        fig_month_bar.update_layout(title_x=0.5)
-        st.plotly_chart(fig_month_bar, use_container_width=True)
+    fig_month_bar = px.bar(monthly_summary, x="Month", y="Amount", color="Month", title="Monthly Spending",
+                           color_discrete_sequence=px.colors.qualitative.Set2)
+    st.plotly_chart(fig_month_bar, use_container_width=True)
 
-    with c8:
-        fig_month_line = px.line(monthly_summary, x="Month", y="Amount", markers=True,
-                                 template=PLOTLY_TEMPLATE, title="Monthly Spending Trend")
-        fig_month_line.update_traces(line=dict(width=3))
-        fig_month_line.update_layout(title_x=0.5)
-        st.plotly_chart(fig_month_line, use_container_width=True)
+    fig_month_line = px.line(monthly_summary, x="Month", y="Amount", markers=True, title="Monthly Trend")
+    st.plotly_chart(fig_month_line, use_container_width=True)
 
-            # 🔍 Compare Two Months (with delta icon)
     st.markdown("### 🔍 Compare Two Months")
-
-    months = monthly_summary["Month"].tolist()
-    if len(months) >= 2:
+    if len(monthly_summary) >= 2:
         m1, m2 = st.columns(2)
         with m1:
-            month_1 = st.selectbox("Select Month 1", months, index=max(0, len(months)-2))
+            month_1 = st.selectbox("Month 1", monthly_summary["Month"])
         with m2:
-            month_2 = st.selectbox("Select Month 2", months, index=len(months)-1)
+            month_2 = st.selectbox("Month 2", monthly_summary["Month"], index=len(monthly_summary)-1)
 
-        spend_1 = monthly_summary.loc[monthly_summary["Month"] == month_1, "Amount"].values[0]
-        spend_2 = monthly_summary.loc[monthly_summary["Month"] == month_2, "Amount"].values[0]
+        spend_1 = monthly_summary[monthly_summary["Month"] == month_1]["Amount"].values[0]
+        spend_2 = monthly_summary[monthly_summary["Month"] == month_2]["Amount"].values[0]
 
-        diff = spend_2 - spend_1
-
-        st.metric(
-            label=f"Difference ({month_2} vs {month_1})",
-            value=f"₹ {spend_2:,.0f}",
-            delta=f"₹ {diff:,.0f}"
-        )
-
-
-# ---------------- DELETE ----------------
-st.subheader("🗑️ Manage Expenses")
-if not df.empty:
-    expense_labels = [f"{r['Name']} - ₹{r['Amount']} ({r['Date']})" for _, r in df.iterrows()]
-    selected_label = st.selectbox("Select expense to delete", expense_labels)
-    if st.button("Delete Selected", use_container_width=True):
-        selected_row = df.iloc[expense_labels.index(selected_label)]
-        conn = get_db()
-        c = conn.cursor()
-        c.execute("""
-            DELETE FROM expenses
-            WHERE username=? AND name=? AND amount=? AND date=? AND category=?
-        """, (
-            st.session_state.username,
-            selected_row["Name"],
-            selected_row["Amount"],
-            str(selected_row["Date"]),
-            selected_row["Category"]
-        ))
-        conn.commit()
-        conn.close()
-        st.success("Expense deleted!")
-        st.rerun()
+        st.metric(f"Difference ({month_2} vs {month_1})", f"₹ {spend_2}", f"₹ {spend_2 - spend_1:.2f}")
 
 # ---------------- EXPORT ----------------
 st.subheader("⬇️ Export Report")
 if not df.empty:
-    col1, col2 = st.columns(2)
-    with col1:
-        csv = df.to_csv(index=False).encode("utf-8")
-        st.download_button("⬇️ Download CSV", csv, "expenses.csv", "text/csv")
+    buffer = BytesIO()
+    export_df = df.copy()
+    export_df["Date"] = pd.to_datetime(export_df["Date"]).dt.strftime("%Y-%m-%d")
 
-    with col2:
-        buffer = BytesIO()
-        export_df = df.copy()
-        export_df["Date"] = pd.to_datetime(export_df["Date"]).dt.strftime("%Y-%m-%d")
-        with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-            export_df.to_excel(writer, index=False, sheet_name="Expenses")
-            ws = writer.sheets["Expenses"]
-            for col in ws.columns:
-                ws.column_dimensions[col[0].column_letter].width = 18
-        buffer.seek(0)
-        st.download_button("⬇️ Download Excel", buffer, "expenses.xlsx",
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        export_df.to_excel(writer, index=False, sheet_name="Expenses")
+        ws = writer.sheets["Expenses"]
+        for col in ws.columns:
+            ws.column_dimensions[col[0].column_letter].width = 18
+
+    buffer.seek(0)
+    st.download_button("⬇️ Download Excel", buffer, "expenses.xlsx",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 st.markdown("---")
-st.caption("Built  using Python, Streamlit & Plotly")
+st.caption("Built using Python & Streamlit")
