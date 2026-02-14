@@ -175,14 +175,22 @@ k3.metric("🎯 Remaining Budget", f"₹ {remaining_budget}")
 
 # ---------------- FILTER ----------------
 st.subheader("🔍 Filter & Analyze")
+search_query = st.text_input("Search by expense name (e.g., lunch, uber)")
 filter_category = st.selectbox("Category", ["All"] + sorted(df["Category"].unique().tolist()) if not df.empty else ["All"])
 filter_month = st.selectbox("Month", ["All"] + sorted(df["Date"].astype(str).str[:7].unique().tolist()) if not df.empty else ["All"])
 
 filtered_df = df.copy()
+
 if filter_category != "All":
     filtered_df = filtered_df[filtered_df["Category"] == filter_category]
+
 if filter_month != "All":
     filtered_df = filtered_df[filtered_df["Date"].astype(str).str.startswith(filter_month)]
+
+if search_query:
+    filtered_df = filtered_df[
+        filtered_df["Name"].str.contains(search_query, case=False, na=False)
+    ]
 
 st.dataframe(filtered_df, use_container_width=True)
 # ---------------- EDIT EXPENSE ----------------
