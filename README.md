@@ -1,6 +1,7 @@
 # 💸 Smart Expense Tracker (Streamlit App)
 
-A beginner-friendly yet realistic Expense Tracker web app built using **Python + Streamlit**.
+Smart Expense Manager (Python, Streamlit, SQLite, Plotly)
+Built a full-stack expense tracking web app with multi-user authentication, budgeting alerts, recurring expenses, interactive dashboards, monthly analytics, AI-driven insights, and PDF/Excel export. Deployed on Streamlit Cloud with GitHub CI workflow.
 
 ## 🔗 Live Demo
 👉 https://smartexpensetracker-bckewjy44xapdtsqws4kbi.streamlit.app/
