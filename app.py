@@ -300,6 +300,31 @@ if not df.empty:
         spend_2 = monthly_summary[monthly_summary["Month"] == month_2]["Amount"].values[0]
 
         st.metric(f"Difference ({month_2} vs {month_1})", f"₹ {spend_2:.0f}", f"₹ {spend_2 - spend_1:.0f}")
+        
+        # ---------------- STACKED MONTHLY CATEGORY COMPARISON ----------------
+st.subheader("📚 Category-wise Monthly Comparison (Stacked Chart)")
+
+if not df.empty:
+    df_stack = df.copy()
+    df_stack["Month"] = pd.to_datetime(df_stack["Date"]).dt.to_period("M").astype(str)
+
+    stack_summary = df_stack.groupby(["Month", "Category"])["Amount"].sum().reset_index()
+
+    fig_stack = px.bar(
+        stack_summary,
+        x="Month",
+        y="Amount",
+        color="Category",
+        title="Category-wise Monthly Spending (Stacked)",
+        text_auto=True,
+        color_discrete_sequence=px.colors.qualitative.Vivid
+    )
+
+    fig_stack.update_layout(barmode="stack")
+    st.plotly_chart(fig_stack, use_container_width=True)
+else:
+    st.info("Add expenses across months to see category-wise monthly comparison.")
+
 
 # ---------------- SMART INSIGHTS (FULL) ----------------
 st.subheader("🧠 Smart Spending Insights")
@@ -426,6 +451,6 @@ if not df.empty:
             pdf_buffer.seek(0)
 
             st.download_button("⬇️ Download PDF", pdf_buffer, filename, "application/pdf")
-            
+
 st.markdown("---")
 st.caption("Built using Python & Streamlit")
