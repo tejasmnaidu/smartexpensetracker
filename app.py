@@ -1,8 +1,8 @@
 import matplotlib
 matplotlib.use("Agg")
 
+import plotly.express as px
 import streamlit as st
-import matplotlib.pyplot as plt
 import pandas as pd
 from datetime import date
 from io import BytesIO
@@ -12,6 +12,9 @@ import hashlib
 # ---------------- CONFIG ----------------
 st.set_page_config(page_title="Smart Expense Manager", page_icon="💸", layout="wide")
 DB_FILE = "app.db"
+
+PLOTLY_COLORS = ["#636EFA", "#EF553B", "#00CC96", "#AB63FA", "#FFA15A", "#19D3F3", "#FF6692"]
+PLOTLY_TEMPLATE = "plotly_white"
 
 # ---------------- DB HELPERS ----------------
 def get_db():
@@ -72,7 +75,6 @@ menu = ["Login", "Register", "Reset Password"]
 choice = st.sidebar.selectbox("Account", menu)
 
 if not st.session_state.logged_in:
-
     if choice == "Login":
         st.subheader("🔐 Login")
         u = st.text_input("Username")
@@ -104,7 +106,6 @@ if not st.session_state.logged_in:
         u = st.text_input("Username")
         old_pw = st.text_input("Old Password", type="password")
         new_pw = st.text_input("New Password", type="password")
-
         if st.button("Reset Password"):
             if verify_user(u, old_pw):
                 update_password(u, new_pw)
@@ -193,14 +194,20 @@ st.dataframe(filtered_df, use_container_width=True)
 if not filtered_df.empty:
     c5, c6 = st.columns(2)
     with c5:
-        st.subheader("📊 Category-wise Spending")
-        st.bar_chart(filtered_df.groupby("Category")["Amount"].sum())
+        bar_df = filtered_df.groupby("Category")["Amount"].sum().reset_index()
+        fig_bar = px.bar(bar_df, x="Category", y="Amount", color="Category",
+                         color_discrete_sequence=PLOTLY_COLORS, template=PLOTLY_TEMPLATE,
+                         text_auto=True, title="Category-wise Spending")
+        fig_bar.update_layout(title_x=0.5)
+        st.plotly_chart(fig_bar, use_container_width=True)
+
     with c6:
-        pie_data = filtered_df.groupby("Category")["Amount"].sum()
-        fig, ax = plt.subplots()
-        ax.pie(pie_data, labels=pie_data.index, autopct="%1.1f%%")
-        ax.axis("equal")
-        st.pyplot(fig)
+        pie_df = filtered_df.groupby("Category")["Amount"].sum().reset_index()
+        fig_pie = px.pie(pie_df, names="Category", values="Amount", hole=0.4,
+                         color_discrete_sequence=PLOTLY_COLORS, template=PLOTLY_TEMPLATE,
+                         title="Category-wise Spending Distribution")
+        fig_pie.update_layout(title_x=0.5)
+        st.plotly_chart(fig_pie, use_container_width=True)
 
 # ---------------- TREND ----------------
 st.subheader("📈 Spending Trend")
@@ -209,67 +216,101 @@ if not df.empty:
     df_trend["Date"] = pd.to_datetime(df_trend["Date"])
     trend_df = df_trend.groupby(df_trend["Date"].dt.to_period("D"))["Amount"].sum().reset_index()
     trend_df["Date"] = trend_df["Date"].astype(str)
-    st.line_chart(trend_df.set_index("Date"))
+    fig_trend = px.line(trend_df, x="Date", y="Amount", markers=True,
+                        template=PLOTLY_TEMPLATE, title="Daily Spending Trend")
+    fig_trend.update_traces(line=dict(width=3))
+    fig_trend.update_layout(title_x=0.5)
+    st.plotly_chart(fig_trend, use_container_width=True)
 
 # ---------------- MONTHLY COMPARISON DASHBOARD ----------------
 st.subheader("📊 Monthly Comparison Dashboard")
-
 if not df.empty:
     df_monthly = df.copy()
     df_monthly["Month"] = pd.to_datetime(df_monthly["Date"]).dt.to_period("M").astype(str)
-
     monthly_summary = df_monthly.groupby("Month")["Amount"].sum().reset_index()
 
     c7, c8 = st.columns(2)
-
     with c7:
-        st.markdown("**📊 Total Spending per Month (Bar Chart)**")
-        st.bar_chart(monthly_summary.set_index("Month"))
+        fig_month_bar = px.bar(monthly_summary, x="Month", y="Amount", color="Month",
+                               color_discrete_sequence=PLOTLY_COLORS, template=PLOTLY_TEMPLATE,
+                               text_auto=True, title="Monthly Spending Comparison")
+        fig_month_bar.update_layout(title_x=0.5)
+        st.plotly_chart(fig_month_bar, use_container_width=True)
 
     with c8:
-        st.markdown("**📈 Monthly Spending Trend (Line Chart)**")
-        st.line_chart(monthly_summary.set_index("Month"))
+        fig_month_line = px.line(monthly_summary, x="Month", y="Amount", markers=True,
+                                 template=PLOTLY_TEMPLATE, title="Monthly Spending Trend")
+        fig_month_line.update_traces(line=dict(width=3))
+        fig_month_line.update_layout(title_x=0.5)
+        st.plotly_chart(fig_month_line, use_container_width=True)
 
-    # Optional comparison selector
+            # 🔍 Compare Two Months (with delta icon)
     st.markdown("### 🔍 Compare Two Months")
 
     months = monthly_summary["Month"].tolist()
     if len(months) >= 2:
         m1, m2 = st.columns(2)
         with m1:
-            month_1 = st.selectbox("Select Month 1", months, index=len(months)-2)
+            month_1 = st.selectbox("Select Month 1", months, index=max(0, len(months)-2))
         with m2:
             month_2 = st.selectbox("Select Month 2", months, index=len(months)-1)
 
-        spend_1 = monthly_summary[monthly_summary["Month"] == month_1]["Amount"].values[0]
-        spend_2 = monthly_summary[monthly_summary["Month"] == month_2]["Amount"].values[0]
+        spend_1 = monthly_summary.loc[monthly_summary["Month"] == month_1, "Amount"].values[0]
+        spend_2 = monthly_summary.loc[monthly_summary["Month"] == month_2, "Amount"].values[0]
 
         diff = spend_2 - spend_1
 
         st.metric(
             label=f"Difference ({month_2} vs {month_1})",
-            value=f"₹ {spend_2}",
-            delta=f"₹ {diff:.2f}"
+            value=f"₹ {spend_2:,.0f}",
+            delta=f"₹ {diff:,.0f}"
         )
-else:
-    st.info("Add expenses across different months to see comparison.")
+
+
+# ---------------- DELETE ----------------
+st.subheader("🗑️ Manage Expenses")
+if not df.empty:
+    expense_labels = [f"{r['Name']} - ₹{r['Amount']} ({r['Date']})" for _, r in df.iterrows()]
+    selected_label = st.selectbox("Select expense to delete", expense_labels)
+    if st.button("Delete Selected", use_container_width=True):
+        selected_row = df.iloc[expense_labels.index(selected_label)]
+        conn = get_db()
+        c = conn.cursor()
+        c.execute("""
+            DELETE FROM expenses
+            WHERE username=? AND name=? AND amount=? AND date=? AND category=?
+        """, (
+            st.session_state.username,
+            selected_row["Name"],
+            selected_row["Amount"],
+            str(selected_row["Date"]),
+            selected_row["Category"]
+        ))
+        conn.commit()
+        conn.close()
+        st.success("Expense deleted!")
+        st.rerun()
 
 # ---------------- EXPORT ----------------
 st.subheader("⬇️ Export Report")
 if not df.empty:
-    buffer = BytesIO()
-    export_df = df.copy()
-    export_df["Date"] = pd.to_datetime(export_df["Date"]).dt.strftime("%Y-%m-%d")
+    col1, col2 = st.columns(2)
+    with col1:
+        csv = df.to_csv(index=False).encode("utf-8")
+        st.download_button("⬇️ Download CSV", csv, "expenses.csv", "text/csv")
 
-    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-        export_df.to_excel(writer, index=False, sheet_name="Expenses")
-        ws = writer.sheets["Expenses"]
-        for col in ws.columns:
-            ws.column_dimensions[col[0].column_letter].width = 18
-
-    buffer.seek(0)
-    st.download_button("⬇️ Download Excel", buffer, "expenses.xlsx",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    with col2:
+        buffer = BytesIO()
+        export_df = df.copy()
+        export_df["Date"] = pd.to_datetime(export_df["Date"]).dt.strftime("%Y-%m-%d")
+        with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+            export_df.to_excel(writer, index=False, sheet_name="Expenses")
+            ws = writer.sheets["Expenses"]
+            for col in ws.columns:
+                ws.column_dimensions[col[0].column_letter].width = 18
+        buffer.seek(0)
+        st.download_button("⬇️ Download Excel", buffer, "expenses.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 st.markdown("---")
-st.caption("Built with  using Python & Streamlit")
+st.caption("Built  using Python, Streamlit & Plotly")
