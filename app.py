@@ -60,6 +60,13 @@ CREATE TABLE IF NOT EXISTS expenses (
 """)
 conn.commit()
 
+# --------- MIGRATION: add recurring column if missing ---------
+try:
+    c.execute("ALTER TABLE expenses ADD COLUMN recurring INTEGER DEFAULT 0")
+    conn.commit()
+except:
+    pass
+
 # ---------------- SESSION ----------------
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
@@ -114,6 +121,36 @@ if not st.session_state.logged_in:
 
     st.stop()
 
+# ---------------- RECURRING EXPENSES ----------------
+st.sidebar.markdown("---")
+st.sidebar.subheader("🔁 Recurring Expenses")
+
+if st.sidebar.button("Carry recurring expenses to this month"):
+    c.execute("""
+        SELECT name, amount, category 
+        FROM expenses 
+        WHERE username=? AND recurring=1
+    """, (st.session_state.username,))
+    recurring_rows = c.fetchall()
+
+    added = 0
+    for name, amount, category in recurring_rows:
+        c.execute("""
+            INSERT INTO expenses (username, name, amount, date, category, recurring)
+            VALUES (?, ?, ?, ?, ?, 1)
+        """, (
+            st.session_state.username,
+            name,
+            amount,
+            date.today().strftime("%Y-%m-%d"),
+            category
+        ))
+        added += 1
+
+    conn.commit()
+    st.sidebar.success(f"Added {added} recurring expenses for this month!")
+    st.rerun()
+
 # ---------------- LOGOUT ----------------
 st.sidebar.success(f"Logged in as {st.session_state.username}")
 if st.sidebar.button("🚪 Logout"):
@@ -133,9 +170,9 @@ if st.sidebar.button("Save Budget"):
     st.sidebar.success("Budget saved!")
 
 # ---------------- LOAD EXPENSES ----------------
-c.execute("SELECT name, amount, date, category FROM expenses WHERE username=?", (st.session_state.username,))
+c.execute("SELECT name, amount, date, category, recurring FROM expenses WHERE username=?", (st.session_state.username,))
 rows = c.fetchall()
-df = pd.DataFrame(rows, columns=["Name", "Amount", "Date", "Category"])
+df = pd.DataFrame(rows, columns=["Name", "Amount", "Date", "Category", "Recurring"])
 if not df.empty:
     df["Date"] = pd.to_datetime(df["Date"]).dt.date
 
@@ -146,11 +183,12 @@ with c1: name = st.text_input("Title")
 with c2: amount = st.number_input("Amount (₹)", 0.0, step=1.0)
 with c3: exp_date = st.date_input("Date", value=date.today())
 with c4: category = st.selectbox("Category", ["Food","Travel","Shopping","Bills","Entertainment","Health","Other"])
+is_recurring = st.checkbox("🔁 Recurring monthly expense?")
 
 if st.button("Add Expense", use_container_width=True):
     if name and amount > 0:
-        c.execute("INSERT INTO expenses VALUES (NULL,?,?,?,?,?)",
-                  (st.session_state.username, name, amount, str(exp_date), category))
+        c.execute("INSERT INTO expenses VALUES (NULL,?,?,?,?,?,?)",
+          (st.session_state.username, name, amount, str(exp_date), category, int(is_recurring)))
         conn.commit()
         st.success("Expense added!")
         st.rerun()
@@ -180,22 +218,17 @@ filter_category = st.selectbox("Category", ["All"] + sorted(df["Category"].uniqu
 filter_month = st.selectbox("Month", ["All"] + sorted(df["Date"].astype(str).str[:7].unique().tolist()) if not df.empty else ["All"])
 
 filtered_df = df.copy()
-
 if filter_category != "All":
     filtered_df = filtered_df[filtered_df["Category"] == filter_category]
-
 if filter_month != "All":
     filtered_df = filtered_df[filtered_df["Date"].astype(str).str.startswith(filter_month)]
-
 if search_query:
-    filtered_df = filtered_df[
-        filtered_df["Name"].str.contains(search_query, case=False, na=False)
-    ]
+    filtered_df = filtered_df[filtered_df["Name"].str.contains(search_query, case=False, na=False)]
 
 st.dataframe(filtered_df, use_container_width=True)
+
 # ---------------- EDIT EXPENSE ----------------
 st.subheader("✏️ Edit Expense")
-
 if not df.empty:
     edit_idx = st.selectbox(
         "Select expense to edit",
@@ -204,13 +237,9 @@ if not df.empty:
     )
 
     col1, col2, col3, col4 = st.columns(4)
-
-    with col1:
-        new_name = st.text_input("Edit Title", value=df.loc[edit_idx, "Name"])
-    with col2:
-        new_amount = st.number_input("Edit Amount (₹)", min_value=0.0, value=float(df.loc[edit_idx, "Amount"]))
-    with col3:
-        new_date = st.date_input("Edit Date", value=df.loc[edit_idx, "Date"])
+    with col1: new_name = st.text_input("Edit Title", value=df.loc[edit_idx, "Name"])
+    with col2: new_amount = st.number_input("Edit Amount (₹)", min_value=0.0, value=float(df.loc[edit_idx, "Amount"]))
+    with col3: new_date = st.date_input("Edit Date", value=df.loc[edit_idx, "Date"])
     with col4:
         new_category = st.selectbox(
             "Edit Category",
@@ -221,36 +250,33 @@ if not df.empty:
     if st.button("💾 Save Changes", use_container_width=True):
         c.execute("""
             UPDATE expenses 
-            SET name=?, amount=?, date=?, category=? 
-            WHERE username=? AND name=? AND amount=? AND date=? AND category=?
+            SET name=?, amount=?, date=?, category=?, recurring=?
+            WHERE username=? AND name=? AND amount=? AND date=? AND category=? AND recurring=?
         """, (
-            new_name, new_amount, str(new_date), new_category,
+            new_name, new_amount, str(new_date), new_category, int(df.loc[edit_idx, "Recurring"]),
             st.session_state.username,
-            df.loc[edit_idx, "Name"],
-            float(df.loc[edit_idx, "Amount"]),
-            str(df.loc[edit_idx, "Date"]),
-            df.loc[edit_idx, "Category"]
+            df.loc[edit_idx, "Name"], float(df.loc[edit_idx, "Amount"]),
+            str(df.loc[edit_idx, "Date"]), df.loc[edit_idx, "Category"], int(df.loc[edit_idx, "Recurring"])
         ))
         conn.commit()
         st.success("Expense updated successfully!")
         st.rerun()
-else:
-    st.info("No expenses available to edit.")
 
 # ---------------- COLORFUL CHARTS ----------------
 if not filtered_df.empty:
     c5, c6 = st.columns(2)
-
     with c5:
         bar_df = filtered_df.groupby("Category")["Amount"].sum().reset_index()
-        fig_bar = px.bar(bar_df, x="Category", y="Amount", color="Category", text_auto=True,
-                         title="Category-wise Spending", color_discrete_sequence=px.colors.qualitative.Bold)
+        fig_bar = px.bar(bar_df, x="Category", y="Amount", color="Category",
+                         text_auto=True, title="Category-wise Spending",
+                         color_discrete_sequence=px.colors.qualitative.Bold)
         st.plotly_chart(fig_bar, use_container_width=True)
 
     with c6:
         pie_df = filtered_df.groupby("Category")["Amount"].sum().reset_index()
         fig_pie = px.pie(pie_df, names="Category", values="Amount", hole=0.4,
-                         title="Spending Distribution", color_discrete_sequence=px.colors.qualitative.Prism)
+                         title="Spending Distribution",
+                         color_discrete_sequence=px.colors.qualitative.Prism)
         st.plotly_chart(fig_pie, use_container_width=True)
 
 # ---------------- TREND ----------------
@@ -265,14 +291,13 @@ if not df.empty:
 
 # ---------------- MONTHLY COMPARISON ----------------
 st.subheader("📊 Monthly Comparison Dashboard")
-
 if not df.empty:
     df_monthly = df.copy()
     df_monthly["Month"] = pd.to_datetime(df_monthly["Date"]).dt.to_period("M").astype(str)
     monthly_summary = df_monthly.groupby("Month")["Amount"].sum().reset_index()
 
-    fig_month_bar = px.bar(monthly_summary, x="Month", y="Amount", color="Month", title="Monthly Spending",
-                           color_discrete_sequence=px.colors.qualitative.Set2)
+    fig_month_bar = px.bar(monthly_summary, x="Month", y="Amount", color="Month",
+                           title="Monthly Spending", color_discrete_sequence=px.colors.qualitative.Set2)
     st.plotly_chart(fig_month_bar, use_container_width=True)
 
     fig_month_line = px.line(monthly_summary, x="Month", y="Amount", markers=True, title="Monthly Trend")
@@ -291,9 +316,8 @@ if not df.empty:
 
         st.metric(f"Difference ({month_2} vs {month_1})", f"₹ {spend_2}", f"₹ {spend_2 - spend_1:.2f}")
 
-        # ---------------- SMART INSIGHTS ----------------
+# ---------------- SMART INSIGHTS ----------------
 st.subheader("🧠 Smart Spending Insights")
-
 if not df.empty:
     df_insight = df.copy()
     df_insight["Month"] = pd.to_datetime(df_insight["Date"]).dt.to_period("M").astype(str)
@@ -306,54 +330,25 @@ if not df.empty:
 
     insights = []
 
-    # 1️⃣ Highest spending category this month
     if not current_df.empty:
         top_cat = current_df.groupby("Category")["Amount"].sum().idxmax()
         top_amt = current_df.groupby("Category")["Amount"].sum().max()
-        insights.append(f"📌 Your highest spending category this month is **{top_cat} (₹{top_amt:.0f})**.")
+        insights.append(f"📌 Highest spending category this month: **{top_cat} (₹{top_amt:.0f})**")
 
-    # 2️⃣ Compare with last month
     if not current_df.empty and not prev_df.empty:
-        curr_total = current_df["Amount"].sum()
-        prev_total = prev_df["Amount"].sum()
-        diff = curr_total - prev_total
-        pct = (diff / prev_total) * 100 if prev_total > 0 else 0
+        diff = current_df["Amount"].sum() - prev_df["Amount"].sum()
+        pct = (diff / prev_df["Amount"].sum()) * 100 if prev_df["Amount"].sum() > 0 else 0
+        arrow = "📈" if diff > 0 else "📉"
+        insights.append(f"{arrow} Month-over-month change: ₹{diff:.0f} ({pct:.1f}%)")
 
-        if diff > 0:
-            insights.append(f"📈 You spent **₹{diff:.0f} more** this month compared to last month (+{pct:.1f}%).")
-        elif diff < 0:
-            insights.append(f"📉 You spent **₹{abs(diff):.0f} less** this month compared to last month ({pct:.1f}%).")
-        else:
-            insights.append("➖ Your spending is the **same as last month**.")
-
-    # 3️⃣ Budget insight
     if monthly_budget > 0:
         if monthly_spent > monthly_budget:
-            insights.append("🚨 You have **exceeded your monthly budget**. Consider cutting down expenses.")
+            insights.append("🚨 Budget exceeded this month.")
         else:
-            remaining = monthly_budget - monthly_spent
-            insights.append(f"✅ You are within budget. You can still spend **₹{remaining:.0f}** this month.")
+            insights.append(f"✅ You are within budget. Remaining: ₹{monthly_budget - monthly_spent:.0f}")
 
-    # 4️⃣ Trend insight
-    if len(df_insight["Month"].unique()) >= 3:
-        monthly_summary = df_insight.groupby("Month")["Amount"].sum().reset_index()
-        last_3 = monthly_summary.tail(3)["Amount"].values
-
-        if last_3[2] > last_3[1] > last_3[0]:
-            insights.append("📊 Your spending is **increasing over the last 3 months**.")
-        elif last_3[2] < last_3[1] < last_3[0]:
-            insights.append("📉 Your spending is **decreasing over the last 3 months**.")
-        else:
-            insights.append("📊 Your spending is **fluctuating over recent months**.")
-
-    if insights:
-        for ins in insights:
-            st.info(ins)
-    else:
-        st.info("Add more data to generate smart insights.")
-else:
-    st.info("Add expenses to see smart insights.")
-
+    for ins in insights:
+        st.info(ins)
 
 # ---------------- EXPORT ----------------
 st.subheader("⬇️ Export Report")
