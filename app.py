@@ -300,7 +300,68 @@ if not df.empty:
         spend_2 = monthly_summary[monthly_summary["Month"] == month_2]["Amount"].values[0]
 
         st.metric(f"Difference ({month_2} vs {month_1})", f"₹ {spend_2:.0f}", f"₹ {spend_2 - spend_1:.0f}")
-        
+
+        # ---------------- AI ASSISTANT ----------------
+st.subheader("🤖 AI Assistant – Smart Money Coach")
+
+if not df.empty:
+    df_ai = df.copy()
+    df_ai["Month"] = pd.to_datetime(df_ai["Date"]).dt.to_period("M").astype(str)
+
+    current_month = date.today().strftime("%Y-%m")
+    prev_month = (pd.Period(current_month) - 1).strftime("%Y-%m")
+
+    current_df = df_ai[df_ai["Month"] == current_month]
+    prev_df = df_ai[df_ai["Month"] == prev_month]
+
+    messages = []
+
+    # Top spending category
+    if not current_df.empty:
+        top_cat = current_df.groupby("Category")["Amount"].sum().idxmax()
+        top_amt = current_df.groupby("Category")["Amount"].sum().max()
+        messages.append(f"🧠 You spent the most on **{top_cat} (₹{top_amt:.0f})** this month.")
+
+    # Month over month change
+    if not current_df.empty and not prev_df.empty:
+        curr_total = current_df["Amount"].sum()
+        prev_total = prev_df["Amount"].sum()
+        diff = curr_total - prev_total
+        pct = (diff / prev_total) * 100 if prev_total > 0 else 0
+
+        if diff > 0:
+            messages.append(f"📈 Your spending increased by **₹{diff:.0f} ({pct:.1f}%)** compared to last month.")
+        elif diff < 0:
+            messages.append(f"📉 Nice! You spent **₹{abs(diff):.0f} ({abs(pct):.1f}%) less** than last month.")
+        else:
+            messages.append("➖ Your spending is the same as last month.")
+
+    # Budget advice
+    if monthly_budget > 0:
+        if monthly_spent > monthly_budget:
+            messages.append("🚨 You’ve crossed your monthly budget. Consider reducing discretionary spending.")
+        else:
+            remaining = monthly_budget - monthly_spent
+            messages.append(f"🎯 You can still spend **₹{remaining:.0f}** this month and stay within budget.")
+
+    # 3-month trend
+    if len(df_ai["Month"].unique()) >= 3:
+        monthly_summary = df_ai.groupby("Month")["Amount"].sum().reset_index()
+        last_3 = monthly_summary.tail(3)["Amount"].values
+
+        if last_3[2] > last_3[1] > last_3[0]:
+            messages.append("📊 Your spending has been **increasing for 3 months**. Try setting stricter limits.")
+        elif last_3[2] < last_3[1] < last_3[0]:
+            messages.append("📉 Great! Your spending has been **decreasing for 3 months**.")
+        else:
+            messages.append("📊 Your spending pattern is fluctuating. Keep an eye on your categories.")
+
+    for msg in messages:
+        st.info(msg)
+else:
+    st.info("Add some expenses to get personalized AI insights.")
+
+
         # ---------------- STACKED MONTHLY CATEGORY COMPARISON ----------------
 st.subheader("📚 Category-wise Monthly Comparison (Stacked Chart)")
 
