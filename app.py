@@ -210,6 +210,16 @@ k1, k2, k3 = st.columns(3)
 k1.metric("💰 Total Spent", f"₹ {total_spent}")
 k2.metric("📅 This Month", f"₹ {monthly_spent}")
 k3.metric("🎯 Remaining Budget", f"₹ {remaining_budget}")
+# ---------------- BUDGET ALERTS ----------------
+if monthly_budget > 0:
+    usage_pct = (monthly_spent / monthly_budget) * 100 if monthly_budget > 0 else 0
+
+    if usage_pct >= 100:
+        st.error("🚨 Budget Alert: You have exceeded your monthly budget!")
+    elif usage_pct >= 80:
+        st.warning(f"🔔 Budget Alert: You’ve used {usage_pct:.1f}% of your monthly budget.")
+    else:
+        st.info(f"ℹ️ Budget usage: {usage_pct:.1f}% of your monthly budget used.")
 
 # ---------------- FILTER ----------------
 st.subheader("🔍 Filter & Analyze")
